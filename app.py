@@ -49,9 +49,7 @@ st.markdown("""
 
 @st.cache_data
 def load_data():
-    """Load and return the SMS spam dataset."""
-    url = 'https://raw.githubusercontent.com/justmarkham/pydata-book/master/data/sms_spam.tsv'
-    df = pd.read_csv(url, sep='\t', header=None, names=['label', 'message'])
+    df = pd.read_csv('sms_spam.tsv.tsv', sep='\t', header=None, names=['label', 'message'])
     return df
 
 def clean_text(text):
