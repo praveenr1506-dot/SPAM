@@ -52,7 +52,7 @@ st.markdown("""
 # ============================================
 @st.cache_data
 def load_data():
-    return pd.read_csv('sms_spam.tsv', sep='\t', header=None, names=['label', 'message'])
+    return pd.read_csv('sms_spam.tsv.tsv', sep='\t', header=None, names=['label', 'message'])
 
 # ============================================
 # CLEAN TEXT
