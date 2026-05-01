@@ -10,41 +10,23 @@ import plotly.express as px
 import plotly.graph_objects as go
 
 # =========================
-# THEME STATE
-# =========================
-if "theme" not in st.session_state:
-    st.session_state.theme = "light"
-
-# =========================
 # PAGE CONFIG
 # =========================
-st.set_page_config(page_title="Spam Classifier", page_icon="📧", layout="wide")
+st.set_page_config(
+    page_title="Spam Classifier Dashboard",
+    page_icon="📧",
+    layout="wide"
+)
 
 # =========================
-# SIDEBAR THEME TOGGLE
+# FORCE WHITE BACKGROUND
 # =========================
-with st.sidebar:
-    st.markdown("### 🎨 Theme")
-    if st.button("Toggle Dark / Light"):
-        st.session_state.theme = "dark" if st.session_state.theme == "light" else "light"
-        st.rerun()
-
-# =========================
-# APPLY THEME
-# =========================
-if st.session_state.theme == "light":
-    bg = "#FFFFFF"
-    text = "#000000"
-else:
-    bg = "#0E1117"
-    text = "#FFFFFF"
-
-st.markdown(f"""
+st.markdown("""
 <style>
-    .stApp {{
-        background-color: {bg};
-        color: {text};
-    }}
+    .stApp {
+        background-color: white;
+        color: black;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -84,6 +66,7 @@ def clean_text(text):
     text = text.lower()
     text = re.sub(r'\d+', '', text)
     text = re.sub(r'[^\w\s]', '', text)
+    text = re.sub(r'\s+', ' ', text).strip()
     return text
 
 # =========================
@@ -91,66 +74,74 @@ def clean_text(text):
 # =========================
 @st.cache_resource
 def train_model(df):
-    df["clean"] = df["message"].apply(clean_text)
-    df["label"] = df["label"].map({"ham": 0, "spam": 1})
+    df = df.copy()
+    df['clean_msg'] = df['message'].apply(clean_text)
+    df['label_enc'] = df['label'].map({'ham': 0, 'spam': 1})
 
-    tfidf = TfidfVectorizer()
-    X = tfidf.fit_transform(df["clean"])
-    y = df["label"]
+    tfidf = TfidfVectorizer(max_features=5000, stop_words='english')
+    X = tfidf.fit_transform(df['clean_msg'])
+    y = df['label_enc']
 
-    X_train, X_test, y_train, y_test = train_test_split(X, y)
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=42, stratify=y
+    )
 
     model = LogisticRegression(max_iter=1000)
     model.fit(X_train, y_train)
 
     y_pred = model.predict(X_test)
-    y_prob = model.predict_proba(X_test)[:,1]
+    y_proba = model.predict_proba(X_test)[:, 1]
 
-    return model, tfidf, X_test, y_test, y_pred, y_prob
+    return model, tfidf, X_test, y_test, y_pred, y_proba
 
 # =========================
 # LOAD + TRAIN
 # =========================
-df = load_data()
-model, tfidf, X_test, y_test, y_pred, y_prob = train_model(df)
+with st.spinner("Loading data..."):
+    df = load_data()
+    model, tfidf, X_test, y_test, y_pred, y_proba = train_model(df)
 
 # =========================
-# TITLE
+# HEADER
 # =========================
 st.title("📧 SMS Spam Classifier Dashboard")
 st.markdown("---")
 
 # =========================
-# SIDEBAR CLASSIFIER
+# SIDEBAR
 # =========================
 with st.sidebar:
-    st.header("🔍 Classify Message")
+    st.header("🔍 Classify a Message")
 
-    msg = st.text_area("Enter message")
+    user_message = st.text_area("Enter message")
 
-    if st.button("Classify"):
-        vec = tfidf.transform([clean_text(msg)])
-        prob = model.predict_proba(vec)[0][1]
+    if st.button("🚀 Classify"):
+        if user_message.strip():
+            cleaned = clean_text(user_message)
+            vec = tfidf.transform([cleaned])
+            prob = model.predict_proba(vec)[0][1]
 
-        if prob > 0.5:
-            st.markdown('<p class="spam-badge">SPAM</p>', unsafe_allow_html=True)
+            if prob >= 0.5:
+                st.markdown('<p class="spam-badge">🚫 SPAM</p>', unsafe_allow_html=True)
+            else:
+                st.markdown('<p class="ham-badge">✅ HAM</p>', unsafe_allow_html=True)
+
+            st.metric("Spam Probability", f"{prob:.2%}")
         else:
-            st.markdown('<p class="ham-badge">HAM</p>', unsafe_allow_html=True)
-
-        st.metric("Spam Probability", f"{prob:.2f}")
+            st.warning("Enter a message")
 
 # =========================
 # METRICS
 # =========================
-acc = accuracy_score(y_test, y_pred)
+accuracy = accuracy_score(y_test, y_pred)
 cm = confusion_matrix(y_test, y_pred)
 
 col1, col2 = st.columns(2)
-col1.metric("Accuracy", f"{acc:.2f}")
+col1.metric("Accuracy", f"{accuracy:.2%}")
 col2.metric("Samples", len(df))
 
 # =========================
-# CHARTS
+# CONFUSION MATRIX
 # =========================
 fig = px.imshow(cm, text_auto=True)
 st.plotly_chart(fig, use_container_width=True)
